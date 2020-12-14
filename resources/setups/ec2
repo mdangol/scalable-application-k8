@@ -1,0 +1,39 @@
+provider "aws" {
+  region = "us-east-1"
+  alias = "ec2-setup"
+}
+
+data "aws_cloudformation_export" "demo-vpc-ec2" { 
+    name = "demo-vpc-VPCID"
+}
+
+data "aws_cloudformation_export" "demo-sg-ec2" { 
+    name = "demo-vpc-SG"
+}
+
+data "aws_subnet_ids" "all_subnet_ids-ec2" {
+    vpc_id = data.aws_cloudformation_export.demo-vpc-ec2.value
+}
+
+data "aws_subnet" "all_subnets-ec2" {
+    for_each = data.aws_subnet_ids.all_subnet_ids-ec2.ids
+    id = each.value
+}
+
+output "subnetsall" {
+    value = [for i in data.aws_subnet.all_subnets-ec2: i.id if i.tags.Name=="${var.EnvironmentName} Private Subnet (AZ2)"]
+}
+
+output "ENVNAME" {
+    value = "${var.EnvironmentName} Private Subnet (AZ2)"
+}
+
+module "ec2-admin-setup" {
+    source = "../modules/ec2"
+    KeyName="${var.EC2KeyPairName}"
+    ImageId="${var.EC2AdminImageId}"
+    InstanceType="t2.micro"
+    SecurityGroup=data.aws_cloudformation_export.demo-sg-ec2.value
+    SubnetId=join(", ", [for i in data.aws_subnet.all_subnets-ec2: i.id if i.tags.Name=="${var.EnvironmentName} Public Subnet (AZ2)"])
+}
+

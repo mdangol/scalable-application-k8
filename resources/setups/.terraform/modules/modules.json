@@ -1,0 +1,1 @@
+{"Modules":[{"Key":"vpc_setup","Source":"../modules/vpc","Dir":"../modules/vpc"},{"Key":"ec2-admin-setup","Source":"../modules/ec2","Dir":"../modules/ec2"},{"Key":"eks-iam-role","Source":"../modules/eks-iam","Dir":"../modules/eks-iam"},{"Key":"eks","Source":"../modules/eks","Dir":"../modules/eks"},{"Key":"","Source":"","Dir":"."}]}

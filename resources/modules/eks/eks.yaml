@@ -1,0 +1,103 @@
+
+Description:  Create EKS for demo purpose
+
+Parameters:
+  EKSClusterName:
+    Description: EKs Cluster Namme
+    Type: String
+  EKSRole:
+    Description: Role that will be used by EKS
+    Type: String
+  SubnetIds:
+    Description: Subnet Ids to use
+    Type: "List<AWS::EC2::Subnet::Id>"
+  SecurityGroupIds:
+    Description: Security group ids to use
+    Type: "List<AWS::EC2::SecurityGroup::Id>"
+  PrivateSubnets:
+    Description: Subnet Ids to use
+    Type: "List<AWS::EC2::Subnet::Id>"
+  WorkerNodesImageId:
+    Description: ImageId for worker node
+    Type: String
+  KeyPairName:
+    Description: Ec2 Key Pair name
+    Type: AWS::EC2::KeyPair::KeyName
+
+
+Resources:
+  myCluster:
+    Type: 'AWS::EKS::Cluster'
+    Properties:
+      Name: !Ref EKSClusterName
+      Version: '1.18'
+      RoleArn: !Ref EKSRole
+      ResourcesVpcConfig:
+        SecurityGroupIds: !Ref SecurityGroupIds
+        SubnetIds: !Ref SubnetIds
+
+  WorkerNodesAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+    Properties:
+      LaunchConfigurationName: !Ref WorkerNodesLaunchConfiguration
+      MinSize: 2
+      MaxSize: 2
+      VPCZoneIdentifier: !Ref PrivateSubnets
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-WorkerNodesAutoScalingGroup"
+          PropagateAtLaunch: true
+        # Without this tag, worker nodes are unable to join the cluster:
+        - Key: !Sub "kubernetes.io/cluster/${myCluster}"
+          Value: "owned"
+          PropagateAtLaunch: true
+
+  WorkerNodesLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    # Wait until cluster is ready before launching worker nodes
+    DependsOn: myCluster
+    Properties:
+      AssociatePublicIpAddress: true
+      IamInstanceProfile: !Ref WorkerNodesInstanceProfile
+      ImageId: !Ref WorkerNodesImageId
+      InstanceType: t3.micro
+      KeyName: !Ref KeyPairName
+      SecurityGroups: !Ref SecurityGroupIds
+      UserData:
+        Fn::Base64: !Sub |
+            #!/bin/bash
+            set -o xtrace
+            /etc/eks/bootstrap.sh ${myCluster}
+            /opt/aws/bin/cfn-signal \
+                            --exit-code $? \
+                            --stack  ${AWS::StackName} \
+                            --resource NodeGroup  \
+                            --region ${AWS::Region}
+
+  WorkerNodesInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref WorkerNodesRole
+
+  WorkerNodesRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service:
+              - ec2.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+     
+     

@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: EC2 template to create AMZ Linux instance for running kubectl
+
+Parameters: 
+  InstanceName: 
+    Description: "Name of the instance"
+    Type: String
+  KeyName:
+      Description: "Name of the existing EC2 keypair"
+      Type: AWS::EC2::KeyPair::KeyName
+      Default: "ec2-demo"
+  ImageId:
+    Description: "ImageId to launch"
+    Type: String
+  InstanceType:
+    Description: "InstanceType"
+    Type: String
+    Default: "t2.micro"
+  SecurityGroup:
+    Description: "SG Name to use"
+    Type: String
+  SubnetId:
+    Description: "SubnetId to deploy this EC2"
+    Type: String
+     
+Resources: 
+  EC2Instance:
+      Type: AWS::EC2::Instance
+      Properties:
+        KeyName: !Ref KeyName
+        ImageId: !Ref ImageId
+        InstanceType: !Ref InstanceType
+        SecurityGroupIds: 
+          - !Ref SecurityGroup
+        SubnetId: !Ref SubnetId
+        UserData: !Base64 |
+          #!/bin/bash -ex
+          
+          # Install kubectl
+          curl -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.18.9/2020-11-02/bin/linux/amd64/kubectl
+          chmod +x ./kubectl
+          mkdir -p $HOME/bin && cp ./kubectl $HOME/bin/kubectl && export PATH=$PATH:$HOME/bin
+          echo 'export PATH=$PATH:$HOME/bin' >> ~/.bashrc
+          kubectl version --short --client
+
+          # Install eksctl
+          curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+          sudo mv /tmp/eksctl /usr/local/bin
+          eksctl version
+
+          # Install IAM Authenticator for eks
+          curl -o aws-iam-authenticator https://amazon-eks.s3.us-west-2.amazonaws.com/1.18.9/2020-11-02/bin/linux/amd64/aws-iam-authenticator
+          chmod +x ./aws-iam-authenticator
+          mkdir -p $HOME/bin && cp ./aws-iam-authenticator $HOME/bin/aws-iam-authenticator && export PATH=$PATH:$HOME/bin
+          echo 'export PATH=$PATH:$HOME/bin' >> ~/.bashrc
+
+
+
+        Tags:
+          - Key: Name
+            Value: !Ref InstanceName
+
+Outputs:
+  InstanceId:
+    Description: InstanceId of the new EC2
+    Value: !Ref 'EC2Instance'
+    
